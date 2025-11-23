@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sadham — Mobile App Developer Portfolio</title>
+  <meta name="description" content="Sadham | Mobile App Developer — Flutter, Firebase, Android, Google Maps, Payment Integration" />
+  <style>
+    :root{--bg:#0b1220;--card:#0f1726;--muted:#9aa6b2;--accent:#06b6d4;--glass:rgba(255,255,255,0.04);--radius:14px}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#e6eef6;background:linear-gradient(180deg,#071023 0%,#071b2a 100%);-webkit-font-smoothing:antialiased}
+
+    /* NAV */
+    header{position:sticky;top:0;z-index:50;background:linear-gradient(180deg,rgba(3,7,18,0.6),rgba(3,7,18,0.35));backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,0.03)}
+    .container{max-width:1100px;margin:0 auto;padding:0 20px}
+    .nav{height:72px;display:flex;align-items:center;justify-content:space-between}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#7c3aed);display:grid;place-items:center;color:#061021;font-weight:800}
+    nav a{color:var(--muted);text-decoration:none;margin:0 10px;font-weight:600}
+    nav a:hover{color:#fff}
+    .cta{background:var(--accent);color:#02111a;padding:8px 12px;border-radius:10px;text-decoration:none;font-weight:700}
+    .hamburger{display:none;border:0;background:transparent;color:var(--muted);cursor:pointer}
+
+    /* HERO */
+    .hero{padding:72px 0 40px}
+    .hero-grid{display:grid;grid-template-columns:1fr 380px;gap:28px;align-items:center}
+    .eyebrow{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.03);color:var(--muted);font-weight:700;margin-bottom:18px}
+    h1{font-size:36px;margin:0 0 12px;color:#fff;line-height:1.06}
+    p.lead{color:var(--muted);margin:0 0 20px}
+    .hero-actions{display:flex;gap:12px}
+
+    /* CARDS */
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02));padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6);transition:transform .25s}
+    .card:hover{transform:translateY(-8px)}
+    .card h4{margin:0 0 8px}
+    .card p{margin:0;color:var(--muted);font-size:14px}
+    .card.mid{margin-top:-36px}
+
+    /* SECTIONS */
+    section{padding:56px 0}
+    .section h2{color:#fff;margin-bottom:10px}
+    .section p{color:var(--muted)}
+
+    /* PROJECT GRID */
+    .projects{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+    .project{background:linear-gradient(180deg,#081827 0%,#071526 100%);border-radius:12px;padding:16px;border:1px solid rgba(255,255,255,0.03)}
+    .project h3{margin:0 0 8px}
+    .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .badge{padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.03);font-size:12px;color:var(--muted)}
+
+    /* CONTACT */
+    .contact-grid{display:grid;grid-template-columns:1fr 420px;gap:20px;align-items:start}
+    .contact-card{background:linear-gradient(180deg,#081827,#071423);padding:20px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+    .contact-card input,.contact-card textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:#e6eef6;margin-bottom:10px}
+    .btn{display:inline-block;padding:10px 14px;border-radius:10px;background:var(--accent);color:#02111a;font-weight:800;text-decoration:none}
+    .meta{color:var(--muted);font-size:14px}
+
+    /* FOOTER */
+    footer{padding:28px 0;border-top:1px solid rgba(255,255,255,0.03);text-align:center;color:var(--muted)}
+
+    /* responsive */
+    @media (max-width:980px){.hero-grid{grid-template-columns:1fr 1fr}.cards{grid-template-columns:repeat(2,1fr)}.card.mid{margin-top:-24px}}
+    @media (max-width:720px){nav{display:none}.hamburger{display:block}.hero-grid{grid-template-columns:1fr}.contact-grid{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.card.mid{margin-top:-12px}}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="container nav">
+    <div class="brand">
+      <div class="logo">S</div>
+      <div style="line-height:1">
+        <div style="font-weight:700;color:#fff">Sadham</div>
+        <div style="font-size:12px;color:var(--muted)">Mobile App Developer</div></form></div></div>
+
+    <nav aria-label="Main navigation">
+      <a href="#home">Home</a>
+      <a href="#projects">Projects</a>
+      <a href="#skills">Skills</a>
+      <a href="#contact">Contact</a>
+      <a class="cta" href="#contact">Hire Me</a>
+    </nav>
+    <button class="hamburger" aria-label="Open menu">☰</button>
+  </div>
+</header>
+
+<main class="container">
+  <section id="home" class="hero">
+    <div class="hero-grid">
+      <div>
+        <span class="eyebrow">7+ years • Flutter & Firebase</span>
+        <h1>Hi, I’m Sadham —
+          building beautiful, reliable mobile apps.</h1>
+        <p class="lead">I design and develop cross-platform mobile applications using Flutter & Dart. I integrate Firebase backends, Google Maps, and multiple payment gateways to deliver production-ready apps.</p>
+
+        <div class="hero-actions">
+          <a class="btn" href="#contact">Work together</a>
+          <a class="meta" href="#projects">See projects ↓</a>
+        </div>
+
+        <div class="cards" style="margin-top:22px">
+          <article class="card">
+            <h4>Flutter & Dart</h4>
+            <p>Clean architecture, state management (Riverpod/Bloc), and pixel-perfect UI.</p>
+          </article>
+          <article class="card mid">
+            <h4>Firebase</h4>
+            <p>Authentication, Firestore, Cloud Functions, Storage, FCM.</p>
+          </article>
+          <article class="card">
+            <h4>Maps & Payments</h4>
+            <p>Google Maps integration, real-time tracking and payment gateways.</p>
+          </article>
+        </div>
+      </div>
+
+      <aside style="padding:18px;border-radius:12px;background:linear-gradient(180deg,#081827,#071423);border:1px solid rgba(255,255,255,0.03);">
+        <h3 style="margin-top:0;color:#fff">Quick Links</h3>
+        <p class="meta">Available for freelance or full‑time engagements. Fast turnaround and clear communication.</p>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <a class="badge" style="padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);color:var(--muted);text-decoration:none">Android</a>
+          <a class="badge" style="padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);color:var(--muted);text-decoration:none">iOS</a>
+          <a class="badge" style="padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);color:var(--muted);text-decoration:none">Firebase</a>
+        </div>
+        <div style="margin-top:18px">
+          <div class="meta">Email</div>
+          <a href="mailto:sadhamhussain2446@gmail.com" style="color:var(--accent);font-weight:700;text-decoration:none">sadhamhussain2446@gmail.com</a>
+          <div style="height:12px"></div>
+          <div class="meta">WhatsApp</div>
+          <a href="https://wa.me/919894802446" style="color:var(--accent);font-weight:700;text-decoration:none">+91 98948 02446</a>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="projects" class="section">
+    <h2>Selected Projects</h2>
+    <p class="meta">A few projects demonstrating my skills in Flutter, Firebase, Maps and Payments.</p>
+
+    <div class="projects" style="margin-top:18px">
+      <div class="project">
+        <h3>Foodieri — Multi‑vendor Food Delivery</h3>
+        <p class="meta">Real‑time orders, rider tracking, multi‑vendor menus, push notifications, Razorpay integration.</p>
+        <div class="badges"><span class="badge">Flutter</span><span class="badge">Firebase</span><span class="badge">Razorpay</span></div>
+      </div>
+
+      <div class="project">
+        <h3>Calqly — Productivity / Finance</h3>
+        <p class="meta">Expense tracking, charts, cloud sync, localizations, App Store & Play Store publishing.</p>
+        <div class="badges"><span class="badge">Flutter</span><span class="badge">Firestore</span><span class="badge">Charts</span></div>
+      </div>
+
+      <div class="project">
+        <h3>RideNow — Taxi Booking</h3>
+        <p class="meta">Real‑time location, driver matching, in‑app wallet, fare estimation, Google Maps integration.</p>
+        <div class="badges"><span class="badge">Flutter</span><span class="badge">Google Maps</span><span class="badge">Payments</span></div>
+      </div>
+
+      <div class="project">
+        <h3>ShopEasy — E‑Commerce Mobile App</h3>
+        <p class="meta">Secure checkout, coupon system, admin panel sync, Firebase backend and analytics.</p>
+        <div class="badges"><span class="badge">Flutter</span><span class="badge">Firebase</span><span class="badge">Payments</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="skills" class="section">
+    <h2>Skills & Services</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+      <div class="card">
+        <h3 style="margin-top:0">Core Skills</h3>
+        <ul>
+          <li>Flutter & Dart — UI, Animations, Plugins</li>
+          <li>Firebase — Auth, Firestore, Functions, Storage</li>
+          <li>Android — SDK, Play Store publishing</li>
+          <li>Maps & Location — Google Maps, Geolocation</li>
+          <li>Payment Gateways — Razorpay, Stripe, PayPal</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">What I Offer</h3>
+        <ul>
+          <li>End-to-end mobile app development</li>
+          <li>App modernization & performance tuning</li>
+          <li>Rapid prototyping & MVPs</li>
+          <li>App Store & Play Store publishing</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="section">
+  <h2>Contact & Get in Touch</h2>
+  <p class="meta">Tell me about your project — I’ll reply within 24 hours.</p>
+
+  <div class="contact-grid" style="margin-top:18px">
+
+    <!-- LEFT: FORM -->
+    <div>
+      <div class="contact-card">
+        <form id="contact-form">
+          <input id="name" placeholder="Your name" />
+          <input id="email" type="email" placeholder="Your email" />
+          <input id="subject" placeholder="Subject" />
+          <textarea id="message" placeholder="Brief project description" rows="6"></textarea>
+
+          <div style="display:flex; gap:10px; align-items:center; margin-top:10px">
+            <button type="submit" class="btn">Send Message</button>
+            <div id="status" style="color:var(--accent); font-weight:700;"></div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- RIGHT: CONTACT INFO -->
+    <aside>
+      <div class="contact-card">
+        <h3 style="margin-top:0;color:#fff">Contact Info</h3>
+
+        <p class="meta"><strong>Email:</strong>
+          <a href="mailto:sadhamhussain2446@gmail.com" style="color:var(--accent);text-decoration:none">
+            sadhamhussain2446@gmail.com
+          </a>
+        </p>
+
+        <p class="meta"><strong>WhatsApp:</strong>
+          <a href="https://wa.me/919894802446" style="color:var(--accent);text-decoration:none">
+            +91 9894802446
+          </a>
+        </p>
+
+        <p class="meta"><strong>Location:</strong> India</p>
+
+      <div style="margin-top:14px; display:flex; gap:10px;">
+        <a class="btn" href="mailto:sadhamhussain2446@gmail.com">Email Me</a>
+        <a class="btn" href="https://wa.me/919894802446">WhatsApp</a>
+      </div>
+
+      </div>
+
+      <div style="margin-top:14px;color:var(--muted);font-size:13px">
+        Availability: Open to freelance & full-time
+      </div>
+    </aside>
+
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="container">
+    © <span id="yr"></span> Sadham — Mobile App Developer • <span class="meta">Designed & Built by me</span>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+  emailjs.init("KdUYoZR9wfYFc5h9H"); // replace with your EmailJS public key
+
+  const form = document.getElementById('contact-form');
+  const status = document.getElementById('status');
+
+  form.addEventListener('submit', function(event) {
+    event.preventDefault(); // prevent default form submission
+
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const subject = document.getElementById('subject').value.trim();
+    const message = document.getElementById('message').value.trim();
+
+    if (!name || !email || !subject || !message) {
+      status.textContent = "Please fill in all fields!";
+      return;
+    }
+
+    status.textContent = "Sending...";
+
+    emailjs.send("service_hzkgnh6", "template_05ut8b9", {
+      name: name,
+      email: email,
+      subject: subject,
+      message: message
+    }).then(function(response) {
+      status.textContent = "Message sent! I will reply soon.";
+      form.reset(); // clear form
+    }, function(error) {
+      status.textContent = "Oops! Something went wrong.";
+      console.error(error);
+    });
+  });
+</script>
+
+
+</body>
+</html>
