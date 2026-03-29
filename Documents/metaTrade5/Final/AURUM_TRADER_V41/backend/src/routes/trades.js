@@ -2,7 +2,7 @@
 
 const express  = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { store, priceState, calcPnl, saveUser, saveTrade, savePendingOrder, addTransaction, getSimConfig } = require('../models/store');
+const { store, priceState, calcPnl, saveUser, saveTrade, savePendingOrder, addTransaction } = require('../models/store');
 const { authenticate } = require('../middleware/auth');
 const { asyncWrap } = require('../middleware/errorHandler');
 
@@ -63,7 +63,6 @@ router.get('/pending', asyncWrap(async (req, res) => {
 
 // ── POST /api/v1/trades/pending ───────────────────────────────────────────────
 router.post('/pending', asyncWrap(async (req, res) => {
-  if (!_simGate(res)) return;
   const { type, lotSize, price, stopLoss, takeProfit, expiry } = req.body;
   const validTypes = ['buy_limit','sell_limit','buy_stop','sell_stop'];
   if (!validTypes.includes(type)) return res.status(400).json({ error: `type must be one of: ${validTypes.join(', ')}` });
@@ -113,31 +112,8 @@ router.get('/:id', asyncWrap(async (req, res) => {
   res.json({ trade: { ..._enrichTrade(trade), livePnl } });
 }));
 
-// ── Simulation gate — shared by market + pending order routes ─────────────────
-function _simGate(res) {
-  const sim = getSimConfig();
-  if (sim.simStatus === 'stopped') {
-    res.status(403).json({ error: 'Trading period has ended (Dec 31, 2025). No new orders accepted.' });
-    return false;
-  }
-  if (sim.simStatus === 'paused') {
-    res.status(403).json({ error: 'Trading is currently paused by the administrator.' });
-    return false;
-  }
-  if (sim.simStatus === 'idle') {
-    res.status(403).json({ error: 'Trading has not started yet. Please wait for the administrator to start.' });
-    return false;
-  }
-  if (sim.simDateMs < sim.simStartMs || sim.simDateMs > sim.simEndMs) {
-    res.status(403).json({ error: 'Trading is only permitted between Jan 1, 2025 and Dec 31, 2025.' });
-    return false;
-  }
-  return true;
-}
-
 // ── POST /api/v1/trades ───────────────────────────────────────────────────────
 router.post('/', asyncWrap(async (req, res) => {
-  if (!_simGate(res)) return;
   const { type, lotSize, stopLoss, takeProfit } = req.body;
   if (!type||!['buy','sell'].includes(type)) return res.status(400).json({ error: 'type must be "buy" or "sell".' });
   const lot = parseFloat(lotSize);

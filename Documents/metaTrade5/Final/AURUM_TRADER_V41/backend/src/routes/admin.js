@@ -356,38 +356,33 @@ router.get('/simulation', asyncWrap(async (req, res) => {
   });
 }));
 
-// Fixed operating window — cannot be changed via API
-const SIM_START_MS = new Date('2025-01-01T00:00:00Z').getTime();
-const SIM_END_MS   = new Date('2025-12-31T23:59:59Z').getTime();
-
 // ── PATCH /api/v1/admin/simulation ────────────────────────────────────────────
 // Update simulation parameters at runtime
 // Body (all optional):
 //   tickIntervalMs : 20–30000  (ms between price ticks)
 //   volatility     : 0.1–50     (price movement per tick)
 //   drift          : -0.5–0.5   (directional bias)
-//   simStatus      : 'running' | 'paused' | 'stopped'
-// NOTE: simStartMs / simEndMs are fixed to Jan 1 – Dec 31 2025 and are ignored.
+//   simStatus      : 'running' | 'paused'
+//   simStartMs     : timestamp (epoch ms)
+//   simEndMs       : timestamp (epoch ms)
 router.patch('/simulation', asyncWrap(async (req, res) => {
-  const { tickIntervalMs, volatility, drift, simStatus } = req.body;
+  const { tickIntervalMs, volatility, drift, simStatus, simStartMs, simEndMs } = req.body;
   const updates = {};
   if (tickIntervalMs !== undefined) updates.tickIntervalMs = tickIntervalMs;
   if (volatility     !== undefined) updates.volatility     = volatility;
   if (drift          !== undefined) updates.drift          = drift;
+  if (simStartMs     !== undefined) updates.simStartMs     = simStartMs;
+  if (simEndMs       !== undefined) updates.simEndMs       = simEndMs;
 
   if (simStatus !== undefined) {
-    const allowed = ['running', 'paused', 'stopped'];
+    const allowed = ['running', 'paused'];
     if (!allowed.includes(simStatus)) {
       return res.status(400).json({ error: `simStatus must be one of: ${allowed.join(', ')}` });
     }
     updates.simStatus = simStatus;
   }
 
-  // Always enforce the fixed 2025 date window
-  updates.simStartMs = SIM_START_MS;
-  updates.simEndMs   = SIM_END_MS;
-
-  if (Object.keys(updates).length === 2) { // only the two enforced dates → nothing user-supplied
+  if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'Provide at least one field to update.' });
   }
 
@@ -397,18 +392,6 @@ router.patch('/simulation', asyncWrap(async (req, res) => {
     config,
     speedLabel: _speedLabel(config.tickIntervalMs),
   });
-}));
-
-// ── POST /api/v1/admin/simulation/reset ───────────────────────────────────────
-// Reset sim date back to Jan 1 2025 and set status to 'idle'
-router.post('/simulation/reset', asyncWrap(async (req, res) => {
-  const config = setSimConfig({
-    simStatus:  'idle',
-    simDateMs:  SIM_START_MS,
-    simStartMs: SIM_START_MS,
-    simEndMs:   SIM_END_MS,
-  });
-  res.json({ message: 'Simulation reset to Jan 1, 2025.', config });
 }));
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
