@@ -375,7 +375,7 @@ router.patch('/simulation', asyncWrap(async (req, res) => {
   if (simEndMs       !== undefined) updates.simEndMs       = simEndMs;
 
   if (simStatus !== undefined) {
-    const allowed = ['running', 'paused'];
+    const allowed = ['idle', 'running', 'paused', 'stopped'];
     if (!allowed.includes(simStatus)) {
       return res.status(400).json({ error: `simStatus must be one of: ${allowed.join(', ')}` });
     }
@@ -391,6 +391,25 @@ router.patch('/simulation', asyncWrap(async (req, res) => {
     message:    'Simulation config updated.',
     config,
     speedLabel: _speedLabel(config.tickIntervalMs),
+  });
+}));
+
+// ── POST /api/v1/admin/simulation/reset ───────────────────────────────────────
+// Reset the replay to Jan 1 2025 and set status to idle (stopped)
+router.post('/simulation/reset', asyncWrap(async (_req, res) => {
+  const current = getSimConfig();
+  const config  = setSimConfig({
+    simStatus:  'idle',
+    simDateMs:  current.simStartMs,   // rewind to start date
+  });
+  res.json({
+    message:     'Replay reset to start.',
+    config,
+    speedLabel:  _speedLabel(config.tickIntervalMs),
+    simDateStr:  new Date(config.simDateMs).toISOString().slice(0, 10),
+    simStartStr: new Date(config.simStartMs).toISOString().slice(0, 10),
+    simEndStr:   new Date(config.simEndMs).toISOString().slice(0, 10),
+    progressPct: 0,
   });
 }));
 
