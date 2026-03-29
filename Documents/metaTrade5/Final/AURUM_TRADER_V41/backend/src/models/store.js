@@ -142,6 +142,19 @@ async function saveTransaction(tx) {
   }
 }
 
+async function deleteUser(userId) {
+  // Remove user and all their trades from in-memory store
+  for (const [tid, t] of store.trades.entries()) {
+    if (t.userId === userId) store.trades.delete(tid);
+  }
+  store.users.delete(userId);
+  // Persist deletion to MongoDB so users don't reappear after restart
+  if (mongoose.connection.readyState === 1) {
+    await Trade.deleteMany({ userId });
+    await User.deleteOne({ _id: userId });
+  }
+}
+
 // ── Simulation Config ─────────────────────────────────────────────────────────
 const simConfig = {
   tickIntervalMs: 29,
@@ -411,5 +424,6 @@ module.exports = {
   savePendingOrder,
   saveTransaction,
   saveSimConfig,
+  deleteUser,
   connectDB,
 };

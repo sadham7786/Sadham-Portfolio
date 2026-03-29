@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { store, priceState, calcPnl, setSimConfig, getSimConfig, addTransaction } = require('../models/store');
+const { store, priceState, calcPnl, setSimConfig, getSimConfig, addTransaction, deleteUser } = require('../models/store');
 const { authenticate } = require('../middleware/auth');
 const { asyncWrap } = require('../middleware/errorHandler');
 
@@ -262,12 +262,7 @@ router.delete('/users/:id', asyncWrap(async (req, res) => {
     return res.status(404).json({ error: 'User not found.' });
   }
 
-  // Remove all trades
-  for (const [tid, t] of store.trades.entries()) {
-    if (t.userId === user.id) store.trades.delete(tid);
-  }
-
-  store.users.delete(user.id);
+  await deleteUser(user.id);
   res.json({ message: `User ${user.email} deleted.` });
 }));
 
