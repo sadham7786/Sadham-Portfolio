@@ -66,11 +66,10 @@ router.get('/depth', asyncWrap(async (req, res) => {
 
 // ── GET /api/v1/market/sentiment ──────────────────────────────────────────────
 router.get('/sentiment', asyncWrap(async (req, res) => {
-  // Simulated sentiment (real impl would use news/options data)
-  const { store } = require('../models/store');
+  const Trade = require('../models/Trade');
+  const trades = await Trade.find({ status: 'open' }).lean();
   let buyCount = 0, sellCount = 0, buyLots = 0, sellLots = 0;
-  for (const t of store.trades.values()) {
-    if (t.status !== 'open') continue;
+  for (const t of trades) {
     if (t.type === 'buy')  { buyCount++;  buyLots  += t.lotSize; }
     else                   { sellCount++; sellLots += t.lotSize; }
   }

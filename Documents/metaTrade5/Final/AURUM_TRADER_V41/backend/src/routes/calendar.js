@@ -154,9 +154,9 @@ async function fetchInvesting() {
     timeZone: '55',      // UTC
     currentTab: 'custom',
     limit_from: '0',
-    country[]: '5',      // USA
-    importance[]: '2',   // medium
-    importance[]: '3',   // high
+    'country[]': '5',      // USA
+   ' importance[]': '2',   // medium
+   ' importance[]': '3',   // high
   });
   const res = await fetch('https://www.investing.com/economic-calendar/Service/getCalendarFilteredData', {
     method: 'POST',

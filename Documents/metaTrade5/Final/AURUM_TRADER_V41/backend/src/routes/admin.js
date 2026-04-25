@@ -1,133 +1,138 @@
 'use strict';
 
 const express = require('express');
-const { store, priceState, calcPnl, setSimConfig, getSimConfig, addTransaction, deleteUser } = require('../models/store');
+const { v4: uuidv4 } = require('uuid');
+
+const { priceState, calcPnl, deleteUser, getSimConfig, setSimConfig } = require('../models/store');
+const User        = require('../models/User');
+const Trade       = require('../models/Trade');
+const PendingOrder = require('../models/PendingOrder');
+const Transaction = require('../models/Transaction');
+
 const { authenticate } = require('../middleware/auth');
-const { asyncWrap } = require('../middleware/errorHandler');
+const { asyncWrap }    = require('../middleware/errorHandler');
 
 const router = express.Router();
 
-// ── Admin secret key guard ────────────────────────────────────────────────────
-// In production use a role field on the user. Here we check a static admin key
-// sent as X-Admin-Key header, falling back to JWT auth for the admin login route.
+// ── Admin secret key guard ───────────────────────────────────────────────────
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'mt5_admin_secret_2024';
 
 function adminAuth(req, res, next) {
   const key = req.headers['x-admin-key'];
   if (key && key === ADMIN_SECRET) return next();
-  // Also allow JWT admin tokens (from /admin/login endpoint)
-  return authenticate(req, res, () => {
-    const user = store.users.get(req.userId);
-    if (!user || user.role !== 'admin') {
+  return authenticate(req, res, async () => {
+    try {
+      const user = await User.findById(req.userId).lean();
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required.' });
+      }
+      next();
+    } catch (e) {
       return res.status(403).json({ error: 'Admin access required.' });
     }
-    next();
   });
 }
 
 // ── POST /api/v1/admin/login ─────────────────────────────────────────────────
-// Admin login with master password (returns admin token)
 router.post('/login', asyncWrap(async (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: 'password required.' });
   if (password !== ADMIN_SECRET) {
     return res.status(401).json({ error: 'Invalid admin credentials.' });
   }
-  // Return the admin key directly (used as X-Admin-Key in subsequent requests)
-  res.json({
-    token: ADMIN_SECRET,
-    message: 'Admin authenticated.',
-  });
+  res.json({ token: ADMIN_SECRET, message: 'Admin authenticated.' });
 }));
 
 // All routes below require admin auth
 router.use(adminAuth);
 
 // ── GET /api/v1/admin/stats ──────────────────────────────────────────────────
-// Platform-wide overview statistics
 router.get('/stats', asyncWrap(async (req, res) => {
   const state = priceState();
-  let totalUsers = 0;
-  let totalBalance = 0;
-  let totalOpenTrades = 0;
-  let totalClosedTrades = 0;
-  let totalPnl = 0;
-  let totalVolume = 0;
-  let activeToday = 0;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayTs = today.getTime();
 
-  for (const user of store.users.values()) {
-    if (user.role === 'admin') continue;
-    totalUsers++;
-    totalBalance += user.balance;
-    if (user.createdAt >= todayTs) activeToday++;
+  const users  = await User.find({ role: { $ne: 'admin' } }).lean();
+  const trades = await Trade.find({}).lean();
+
+  // Build userId → user map for quick lookups
+  const userMap = new Map(users.map(u => [String(u._id), u]));
+
+  let totalBalance = 0, activeToday = 0;
+  for (const u of users) {
+    totalBalance += u.balance;
+    if ((u.createdAt || 0) >= todayTs) activeToday++;
   }
 
-  for (const trade of store.trades.values()) {
-    const user = store.users.get(trade.userId);
-    if (!user || user.role === 'admin') continue;
-    if (trade.status === 'open') {
+  let totalOpenTrades = 0, totalClosedTrades = 0, totalPnl = 0, totalVolume = 0;
+  for (const t of trades) {
+    const u = userMap.get(String(t.userId));
+    if (!u || u.role === 'admin') continue;
+    if (t.status === 'open') {
       totalOpenTrades++;
-      const closePrice = trade.type === 'buy' ? state.bid : state.ask;
-      totalPnl += calcPnl(trade, closePrice);
-      totalVolume += trade.lotSize;
+      const cp = t.type === 'buy' ? state.bid : state.ask;
+      totalPnl += calcPnl(t, cp);
+      totalVolume += t.lotSize;
     } else {
       totalClosedTrades++;
-      totalPnl += (trade.pnl || 0);
-      totalVolume += trade.lotSize;
+      totalPnl += (t.pnl || 0);
+      totalVolume += t.lotSize;
     }
   }
 
   res.json({
     stats: {
-      totalUsers,
-      totalBalance: parseFloat(totalBalance.toFixed(2)),
+      totalUsers:        users.length,
+      totalBalance:      parseFloat(totalBalance.toFixed(2)),
       totalOpenTrades,
       totalClosedTrades,
-      totalTrades: totalOpenTrades + totalClosedTrades,
-      totalPnl: parseFloat(totalPnl.toFixed(2)),
-      totalVolume: parseFloat(totalVolume.toFixed(2)),
-      newUsersToday: activeToday,
-      currentBid: state.bid,
-      currentAsk: state.ask,
-      spread: state.spread,
-      high24h: state.high24h,
-      low24h: state.low24h,
-      change: state.change,
-      changePercent: state.changePercent,
+      totalTrades:       totalOpenTrades + totalClosedTrades,
+      totalPnl:          parseFloat(totalPnl.toFixed(2)),
+      totalVolume:       parseFloat(totalVolume.toFixed(2)),
+      newUsersToday:     activeToday,
+      currentBid:        state.bid,
+      currentAsk:        state.ask,
+      spread:            state.spread,
     },
   });
 }));
 
 // ── GET /api/v1/admin/users ──────────────────────────────────────────────────
-// List all users with their stats
 router.get('/users', asyncWrap(async (req, res) => {
-  const state = priceState();
-  const search = (req.query.search || '').toLowerCase();
-  const page = parseInt(req.query.page) || 1;
-  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
-  const sortBy = req.query.sortBy || 'createdAt'; // createdAt | balance | fullName | trades
-  const order = req.query.order === 'asc' ? 1 : -1;
+  const state   = priceState();
+  const search  = (req.query.search || '').toLowerCase();
+  const page    = parseInt(req.query.page)  || 1;
+  const limit   = Math.min(parseInt(req.query.limit) || 20, 100);
+  const sortBy  = req.query.sortBy || 'createdAt';
+  const order   = req.query.order === 'asc' ? 1 : -1;
 
-  const users = [];
+  const query = { role: { $ne: 'admin' } };
+  if (search) {
+    query.$or = [
+      { fullName: { $regex: search, $options: 'i' } },
+      { email:    { $regex: search, $options: 'i' } },
+    ];
+  }
 
-  for (const user of store.users.values()) {
-    if (user.role === 'admin') continue;
-    if (search && !user.fullName.toLowerCase().includes(search) &&
-        !user.email.toLowerCase().includes(search)) continue;
+  const rawUsers = await User.find(query).lean();
+  const allTrades = await Trade.find({}).lean();
 
-    // Compute live stats per user
-    let openTrades = 0;
-    let closedTrades = 0;
-    let totalPnl = 0;
-    let livePnl = 0;
-    let totalLots = 0;
-    let wins = 0;
+  // Group trades by userId
+  const tradesByUser = new Map();
+  for (const t of allTrades) {
+    const uid = String(t.userId);
+    if (!tradesByUser.has(uid)) tradesByUser.set(uid, []);
+    tradesByUser.get(uid).push(t);
+  }
 
-    for (const t of store.trades.values()) {
-      if (t.userId !== user.id) continue;
+  const users = rawUsers.map(u => {
+    const uid = String(u._id);
+    const userTrades = tradesByUser.get(uid) || [];
+    let openTrades = 0, closedTrades = 0, totalPnl = 0, livePnl = 0, totalLots = 0, wins = 0;
+
+    for (const t of userTrades) {
       if (t.status === 'open') {
         openTrades++;
         const cp = t.type === 'buy' ? state.bid : state.ask;
@@ -141,26 +146,25 @@ router.get('/users', asyncWrap(async (req, res) => {
       }
     }
 
-    users.push({
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      accountType: user.accountType,
-      balance: user.balance,
-      equity: parseFloat((user.balance + livePnl).toFixed(2)),
-      livePnl: parseFloat(livePnl.toFixed(2)),
+    return {
+      id:           uid,
+      fullName:     u.fullName,
+      email:        u.email,
+      accountType:  u.accountType,
+      balance:      u.balance,
+      equity:       parseFloat((u.balance + livePnl).toFixed(2)),
+      livePnl:      parseFloat(livePnl.toFixed(2)),
       openTrades,
       closedTrades,
-      totalTrades: openTrades + closedTrades,
-      totalPnl: parseFloat(totalPnl.toFixed(2)),
-      totalLots: parseFloat(totalLots.toFixed(2)),
-      winRate: closedTrades > 0 ? parseFloat(((wins / closedTrades) * 100).toFixed(1)) : 0,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    });
-  }
+      totalTrades:  openTrades + closedTrades,
+      totalPnl:     parseFloat(totalPnl.toFixed(2)),
+      totalLots:    parseFloat(totalLots.toFixed(2)),
+      winRate:      closedTrades > 0 ? parseFloat(((wins / closedTrades) * 100).toFixed(1)) : 0,
+      createdAt:    u.createdAt,
+      updatedAt:    u.updatedAt,
+    };
+  });
 
-  // Sort
   users.sort((a, b) => {
     let av = a[sortBy], bv = b[sortBy];
     if (typeof av === 'string') av = av.toLowerCase();
@@ -176,29 +180,27 @@ router.get('/users', asyncWrap(async (req, res) => {
 }));
 
 // ── GET /api/v1/admin/users/:id ──────────────────────────────────────────────
-// Single user detail with all trades
 router.get('/users/:id', asyncWrap(async (req, res) => {
-  const user = store.users.get(req.params.id);
+  const user = await User.findById(req.params.id).lean();
   if (!user || user.role === 'admin') {
     return res.status(404).json({ error: 'User not found.' });
   }
 
   const state = priceState();
-  const openTrades = [];
-  const closedTrades = [];
-  let livePnl = 0;
-  let totalPnl = 0;
-  let wins = 0;
+  const trades = await Trade.find({ userId: req.params.id }).lean();
 
-  for (const t of store.trades.values()) {
-    if (t.userId !== user.id) continue;
+  const openTrades   = [];
+  const closedTrades = [];
+  let livePnl = 0, totalPnl = 0, wins = 0;
+
+  for (const t of trades) {
     if (t.status === 'open') {
-      const cp = t.type === 'buy' ? state.bid : state.ask;
+      const cp  = t.type === 'buy' ? state.bid : state.ask;
       const pnl = calcPnl(t, cp);
       livePnl += pnl;
-      openTrades.push({ ...t, livePnl: parseFloat(pnl.toFixed(2)), currentPrice: cp });
+      openTrades.push({ ...t, id: String(t._id), livePnl: parseFloat(pnl.toFixed(2)), currentPrice: cp });
     } else {
-      closedTrades.push(t);
+      closedTrades.push({ ...t, id: String(t._id) });
       totalPnl += (t.pnl || 0);
       if ((t.pnl || 0) >= 0) wins++;
     }
@@ -206,20 +208,21 @@ router.get('/users/:id', asyncWrap(async (req, res) => {
 
   closedTrades.sort((a, b) => (b.closeTime || 0) - (a.closeTime || 0));
 
-  const { passwordHash, ...safeUser } = user;
+  const { passwordHash, _id, ...rest } = user;
   res.json({
     user: {
-      ...safeUser,
-      equity: parseFloat((user.balance + livePnl).toFixed(2)),
+      ...rest,
+      id:      String(_id),
+      equity:  parseFloat((user.balance + livePnl).toFixed(2)),
       livePnl: parseFloat(livePnl.toFixed(2)),
     },
     openTrades,
     closedTrades: closedTrades.slice(0, 50),
     stats: {
-      totalPnl: parseFloat(totalPnl.toFixed(2)),
+      totalPnl:     parseFloat(totalPnl.toFixed(2)),
       closedTrades: closedTrades.length,
-      openTrades: openTrades.length,
-      winRate: closedTrades.length > 0
+      openTrades:   openTrades.length,
+      winRate:      closedTrades.length > 0
         ? parseFloat(((wins / closedTrades.length) * 100).toFixed(1)) : 0,
       wins,
       losses: closedTrades.length - wins,
@@ -228,69 +231,77 @@ router.get('/users/:id', asyncWrap(async (req, res) => {
 }));
 
 // ── PATCH /api/v1/admin/users/:id/balance ───────────────────────────────────
-// Adjust a user's balance
 router.patch('/users/:id/balance', asyncWrap(async (req, res) => {
-  const user = store.users.get(req.params.id);
+  const user = await User.findById(req.params.id).lean();
   if (!user || user.role === 'admin') {
     return res.status(404).json({ error: 'User not found.' });
   }
 
-  const { balance } = req.body;
-  const newBal = parseFloat(balance);
+  const newBal = parseFloat(req.body.balance);
   if (isNaN(newBal) || newBal < 0 || newBal > 10000000) {
     return res.status(400).json({ error: 'balance must be between 0 and 10,000,000.' });
   }
 
   const prevBal = user.balance;
   const diff    = parseFloat((newBal - prevBal).toFixed(2));
-  store.users.set(user.id, { ...user, balance: newBal, updatedAt: Date.now() });
 
-  // Record transaction so it appears in app history
+  await User.findByIdAndUpdate(req.params.id, { $set: { balance: newBal, updatedAt: Date.now() } });
+
   const txType = diff >= 0 ? 'deposit' : 'withdrawal';
   const label  = diff >= 0 ? 'Admin credit' : 'Admin debit';
-  addTransaction(user.id, txType, Math.abs(diff),
-    `${label}: $${Math.abs(diff).toFixed(2)} (balance set to $${newBal.toFixed(2)})`);
+  await Transaction.create({
+    _id:         uuidv4(),
+    userId:      String(user._id),
+    type:        txType,
+    amount:      Math.abs(diff),
+    description: `${label}: $${Math.abs(diff).toFixed(2)} (balance set to $${newBal.toFixed(2)})`,
+    createdAt:   Date.now(),
+  });
 
   res.json({ message: `Balance updated to $${newBal.toFixed(2)}`, balance: newBal, prev: prevBal });
 }));
 
 // ── DELETE /api/v1/admin/users/:id ──────────────────────────────────────────
-// Delete a user and all their trades
 router.delete('/users/:id', asyncWrap(async (req, res) => {
-  const user = store.users.get(req.params.id);
+  const user = await User.findById(req.params.id).lean();
   if (!user || user.role === 'admin') {
     return res.status(404).json({ error: 'User not found.' });
   }
 
-  await deleteUser(user.id);
+  await deleteUser(req.params.id);
   res.json({ message: `User ${user.email} deleted.` });
 }));
 
 // ── GET /api/v1/admin/trades ─────────────────────────────────────────────────
-// All trades across all users
 router.get('/trades', asyncWrap(async (req, res) => {
-  const state = priceState();
-  const status = req.query.status || 'all';
-  const page = parseInt(req.query.page) || 1;
-  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const state   = priceState();
+  const status  = req.query.status || 'all';
+  const page    = parseInt(req.query.page)  || 1;
+  const limit   = Math.min(parseInt(req.query.limit) || 50, 200);
 
-  const trades = [];
+  const query = status !== 'all' ? { status } : {};
+  const rawTrades = await Trade.find(query).lean();
 
-  for (const t of store.trades.values()) {
-    if (status !== 'all' && t.status !== status) continue;
-    const user = store.users.get(t.userId);
+  // Fetch user info for all unique userIds
+  const userIds = [...new Set(rawTrades.map(t => String(t.userId)))];
+  const users   = await User.find({ _id: { $in: userIds } }).lean();
+  const userMap = new Map(users.map(u => [String(u._id), u]));
+
+  const trades = rawTrades.map(t => {
+    const u = userMap.get(String(t.userId));
     let livePnl = null;
     if (t.status === 'open') {
       const cp = t.type === 'buy' ? state.bid : state.ask;
-      livePnl = parseFloat(calcPnl(t, cp).toFixed(2));
+      livePnl  = parseFloat(calcPnl(t, cp).toFixed(2));
     }
-    trades.push({
+    return {
       ...t,
+      id:        String(t._id),
       livePnl,
-      userName: user ? user.fullName : 'Unknown',
-      userEmail: user ? user.email : '',
-    });
-  }
+      userName:  u ? u.fullName : 'Unknown',
+      userEmail: u ? u.email    : '',
+    };
+  });
 
   trades.sort((a, b) => {
     if (a.status !== b.status) return a.status === 'open' ? -1 : 1;
@@ -299,75 +310,52 @@ router.get('/trades', asyncWrap(async (req, res) => {
 
   const total = trades.length;
   const start = (page - 1) * limit;
-  const paged = trades.slice(start, start + limit);
-
-  res.json({ trades: paged, total, page, pages: Math.ceil(total / limit) });
+  res.json({ trades: trades.slice(start, start + limit), total, page, pages: Math.ceil(total / limit) });
 }));
 
 // ── POST /api/v1/admin/users/:id/close-all ──────────────────────────────────
-// Force close all open trades for a user
 router.post('/users/:id/close-all', asyncWrap(async (req, res) => {
-  const user = store.users.get(req.params.id);
+  const user = await User.findById(req.params.id).lean();
   if (!user) return res.status(404).json({ error: 'User not found.' });
 
   const state = priceState();
-  let closed = 0;
-  let totalPnl = 0;
+  const openTrades = await Trade.find({ userId: req.params.id, status: 'open' }).lean();
+
+  let closed = 0, totalPnl = 0;
   const now = Date.now();
 
-  for (const [tid, t] of store.trades.entries()) {
-    if (t.userId !== user.id || t.status !== 'open') continue;
-    const cp = t.type === 'buy' ? state.bid : state.ask;
+  for (const t of openTrades) {
+    const cp  = t.type === 'buy' ? state.bid : state.ask;
     const pnl = parseFloat(calcPnl(t, cp).toFixed(2));
     totalPnl += pnl;
-    store.trades.set(tid, {
-      ...t, status: 'closed', closePrice: cp, closeTime: now,
-      pnl, closeReason: 'admin_close', updatedAt: now,
+
+    await Trade.findByIdAndUpdate(t._id, {
+      $set: { status: 'closed', closePrice: cp, closeTime: now, pnl, closeReason: 'admin_close' }
     });
     closed++;
   }
 
   const newBalance = parseFloat((user.balance + totalPnl).toFixed(2));
-  store.users.set(user.id, { ...user, balance: newBalance, updatedAt: now });
+  await User.findByIdAndUpdate(req.params.id, { $set: { balance: newBalance, updatedAt: now } });
 
   res.json({ closed, totalPnl: parseFloat(totalPnl.toFixed(2)), newBalance, message: `${closed} trades closed.` });
 }));
 
-
-// ── GET /api/v1/admin/simulation ──────────────────────────────────────────────
-// Get current simulation speed / volatility / drift config
+// ── GET /api/v1/admin/simulation ─────────────────────────────────────────────
 router.get('/simulation', asyncWrap(async (req, res) => {
-  const config = getSimConfig();
-  const speedLabel = _speedLabel(config.tickIntervalMs);
-  const progress = config.simStartMs < config.simEndMs
-    ? ((config.simDateMs - config.simStartMs) / (config.simEndMs - config.simStartMs) * 100).toFixed(1)
-    : '0.0';
-  res.json({
-    ...config, speedLabel,
-    simDateStr:  new Date(config.simDateMs).toISOString().slice(0,10),
-    simStartStr: new Date(config.simStartMs).toISOString().slice(0,10),
-    simEndStr:   new Date(config.simEndMs).toISOString().slice(0,10),
-    progressPct: parseFloat(progress),
-  });
+  res.json(getSimConfig());
 }));
 
-// ── PATCH /api/v1/admin/simulation ────────────────────────────────────────────
-// Update simulation parameters at runtime
-// Body (all optional):
-//   tickIntervalMs : 20–30000  (ms between price ticks)
-//   volatility     : 0.1–50     (price movement per tick)
-//   drift          : -0.5–0.5   (directional bias)
-//   simStatus      : 'running' | 'paused'
-//   simStartMs     : timestamp (epoch ms)
-//   simEndMs       : timestamp (epoch ms)
+// ── PATCH /api/v1/admin/simulation ───────────────────────────────────────────
 router.patch('/simulation', asyncWrap(async (req, res) => {
-  const { tickIntervalMs, volatility, drift, simStatus, simStartMs, simEndMs } = req.body;
+  const { tickIntervalMs, volatility, drift, simStatus, simStartMs, simEndMs, simDateMs } = req.body;
   const updates = {};
   if (tickIntervalMs !== undefined) updates.tickIntervalMs = tickIntervalMs;
   if (volatility     !== undefined) updates.volatility     = volatility;
   if (drift          !== undefined) updates.drift          = drift;
   if (simStartMs     !== undefined) updates.simStartMs     = simStartMs;
   if (simEndMs       !== undefined) updates.simEndMs       = simEndMs;
+  if (simDateMs      !== undefined) updates.simDateMs      = simDateMs;
 
   if (simStatus !== undefined) {
     const allowed = ['idle', 'running', 'paused', 'stopped'];
@@ -382,42 +370,112 @@ router.patch('/simulation', asyncWrap(async (req, res) => {
   }
 
   const config = setSimConfig(updates);
-  res.json({
-    message:    'Simulation config updated.',
-    config,
-    speedLabel: _speedLabel(config.tickIntervalMs),
-  });
+  res.json({ ...config, message: 'Simulation config updated.' });
 }));
 
-// ── POST /api/v1/admin/simulation/reset ───────────────────────────────────────
-// Reset the replay to Jan 1 2025 and set status to idle (stopped)
+// ── POST /api/v1/admin/simulation/reset ──────────────────────────────────────
 router.post('/simulation/reset', asyncWrap(async (_req, res) => {
   const current = getSimConfig();
-  const config  = setSimConfig({
-    simStatus:  'idle',
-    simDateMs:  current.simStartMs,   // rewind to start date
-  });
+  const config  = setSimConfig({ simStatus: 'idle', simDateMs: current.simStartMs });
+  res.json({ ...config, message: 'Replay reset to start.' });
+}));
+
+// ── POST /api/v1/admin/game/init ─────────────────────────────────────────────
+router.post('/game/init', asyncWrap(async (req, res) => {
+  const balance = Math.max(1, parseFloat(req.body?.balance) || 10000);
+  const state   = priceState();
+  const now     = Date.now();
+  let tradesClosed = 0, ordersCancelled = 0, usersReset = 0;
+
+  // Close all open trades at current market price
+  const openTrades = await Trade.find({ status: 'open' }).lean();
+  for (const t of openTrades) {
+    const closePrice = t.type === 'buy' ? state.bid : state.ask;
+    const pnl = calcPnl(t, closePrice);
+    await Trade.findByIdAndUpdate(t._id, {
+      $set: { status: 'closed', closePrice, closeTime: now, pnl, closeReason: 'game_reset' }
+    });
+    tradesClosed++;
+  }
+
+  // Cancel all pending orders
+  const pendingOrders = await PendingOrder.find({ status: 'pending' }).lean();
+  for (const o of pendingOrders) {
+    await PendingOrder.findByIdAndUpdate(o._id, { $set: { status: 'cancelled', updatedAt: now } });
+    ordersCancelled++;
+  }
+
+  // Reset all non-admin user balances
+  const result = await User.updateMany(
+    { role: { $ne: 'admin' } },
+    { $set: { balance, updatedAt: now } }
+  );
+  usersReset = result.modifiedCount;
+
   res.json({
-    message:     'Replay reset to start.',
-    config,
-    speedLabel:  _speedLabel(config.tickIntervalMs),
-    simDateStr:  new Date(config.simDateMs).toISOString().slice(0, 10),
-    simStartStr: new Date(config.simStartMs).toISOString().slice(0, 10),
-    simEndStr:   new Date(config.simEndMs).toISOString().slice(0, 10),
-    progressPct: 0,
+    message:        `Game initialised — ${usersReset} users reset to $${balance.toFixed(2)}.`,
+    usersReset,
+    tradesClosed,
+    ordersCancelled,
+    initialBalance: balance,
   });
 }));
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function _speedLabel(ms) {
-  if (ms <= 30)   return 'TURBO (~35/sec)';
-  if (ms <= 100)  return 'ULTRA FAST';
-  if (ms <= 200)  return 'ULTRA FAST';
-  if (ms <= 500)  return 'FAST';
-  if (ms <= 1000) return 'NORMAL';
-  if (ms <= 3000) return 'SLOW';
-  if (ms <= 8000) return 'VERY SLOW';
-  return 'PAUSED-LIKE';
-}
+// ── GET /api/v1/admin/rankings ────────────────────────────────────────────────
+router.get('/rankings', asyncWrap(async (req, res) => {
+  const state = priceState();
+
+  const users  = await User.find({ role: { $ne: 'admin' } }).lean();
+  const trades = await Trade.find({}).lean();
+
+  // Group trades by userId
+  const tradesByUser = new Map();
+  for (const t of trades) {
+    const uid = String(t.userId);
+    if (!tradesByUser.has(uid)) tradesByUser.set(uid, []);
+    tradesByUser.get(uid).push(t);
+  }
+
+  const userStats = users.map(u => {
+    const uid = String(u._id);
+    const userTrades = tradesByUser.get(uid) || [];
+    let totalPnl = 0, wins = 0, losses = 0, openCount = 0, closedCount = 0, livePnl = 0;
+
+    for (const t of userTrades) {
+      if (t.status === 'open') {
+        openCount++;
+        const cp = t.type === 'buy' ? state.bid : state.ask;
+        livePnl += calcPnl(t, cp);
+      } else if (t.status === 'closed') {
+        closedCount++;
+        const pnl = t.pnl || 0;
+        totalPnl += pnl;
+        if (pnl >= 0) wins++; else losses++;
+      }
+    }
+
+    const winRate = closedCount > 0 ? parseFloat(((wins / closedCount) * 100).toFixed(1)) : 0;
+    return {
+      userId:      uid,
+      name:        u.fullName || u.email,
+      email:       u.email,
+      balance:     parseFloat((u.balance + livePnl).toFixed(2)),
+      cashBalance: parseFloat(u.balance.toFixed(2)),
+      totalPnl:    parseFloat((totalPnl + livePnl).toFixed(2)),
+      realizedPnl: parseFloat(totalPnl.toFixed(2)),
+      livePnl:     parseFloat(livePnl.toFixed(2)),
+      openTrades:  openCount,
+      totalTrades: closedCount,
+      wins,
+      losses,
+      winRate,
+    };
+  });
+
+  userStats.sort((a, b) => b.balance - a.balance);
+  const rankings = userStats.map((u, i) => ({ rank: i + 1, ...u }));
+
+  res.json({ rankings, generatedAt: new Date().toISOString() });
+}));
 
 module.exports = router;

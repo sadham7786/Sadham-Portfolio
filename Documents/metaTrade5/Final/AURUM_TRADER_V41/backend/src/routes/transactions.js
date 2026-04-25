@@ -1,9 +1,9 @@
-// ── /api/v1/transactions ──────────────────────────────────────────────────────
 'use strict';
 const express = require('express');
-const { store } = require('../models/store');
+const Transaction = require('../models/Transaction');
 const { authenticate } = require('../middleware/auth');
 const { asyncWrap } = require('../middleware/errorHandler');
+
 const router = express.Router();
 router.use(authenticate);
 
@@ -13,18 +13,17 @@ router.get('/', asyncWrap(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 100);
   const type  = req.query.type || 'all';
 
-  const txs = [];
-  if (!store.transactions) store.transactions = new Map();
-  for (const tx of store.transactions.values()) {
-    if (tx.userId !== req.userId) continue;
-    if (type !== 'all' && tx.type !== type) continue;
-    txs.push(tx);
-  }
-  txs.sort((a,b) => b.createdAt - a.createdAt);
+  const query = { userId: req.userId };
+  if (type !== 'all') query.type = type;
 
-  const total = txs.length;
-  const paged = txs.slice((page-1)*limit, page*limit);
-  res.json({ transactions: paged, total, page, pages: Math.ceil(total/limit) });
+  const total = await Transaction.countDocuments(query);
+  const txs   = await Transaction.find(query)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .lean();
+
+  res.json({ transactions: txs, total, page, pages: Math.ceil(total / limit) });
 }));
 
 module.exports = router;
